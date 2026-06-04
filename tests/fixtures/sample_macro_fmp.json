@@ -1,0 +1,7 @@
+[
+  {"event": "CPI m/m", "date": "2026-06-01 08:30:00", "country": "US", "impact": "High", "actual": null, "previous": "0.3"},
+  {"event": "Non-Farm Employment Change", "date": "2026-06-05 08:30:00", "country": "US", "impact": "High", "actual": null, "previous": "177K"},
+  {"event": "FOMC Statement", "date": "2026-06-11 18:00:00", "country": "US", "impact": "High", "actual": null, "previous": ""},
+  {"event": "Retail Sales m/m", "date": "2026-06-18 08:30:00", "country": "US", "impact": "Medium", "actual": null, "previous": "0.1"},
+  {"event": "Flash GDP q/q", "date": "2026-06-25 08:30:00", "country": "US", "impact": "High", "actual": null, "previous": "2.4"}
+]

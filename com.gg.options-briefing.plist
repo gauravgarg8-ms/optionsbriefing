@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd job for Daily Options Briefing System.
+
+  SETUP:
+    1. Edit PYTHON_PATH and PROJECT_PATH below for your machine.
+    2. cp com.gg.options-briefing.plist ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.gg.options-briefing.plist
+
+  To find your Python path:  which python3
+  To find your project path: pwd   (run from the options-briefing/ directory)
+-->
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.gg.options-briefing</string>
+
+    <!-- ── Replace these two paths ───────────────────────── -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/.venv/bin/python</string>
+        <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/main.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing</string>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <!-- Run Mon–Fri at 7:30 AM (hour=7, minute=30) -->
+    <!-- launchd fires on next wake if Mac was asleep at trigger time -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>7</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/logs/launchd_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/logs/launchd_stderr.log</string>
+
+    <!-- Restart if it crashes (won't loop — next fire is next weekday) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+</dict>
+</plist>

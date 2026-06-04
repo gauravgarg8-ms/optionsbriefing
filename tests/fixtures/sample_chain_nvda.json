@@ -1,0 +1,81 @@
+{
+  "options": {
+    "option": [
+      {
+        "symbol": "NVDA260706P00130000",
+        "description": "NVDA Jul 06 2026 $130 Put",
+        "exch": "CBOE",
+        "type": "put",
+        "last": 2.50,
+        "change": -0.10,
+        "volume": 1250,
+        "open_interest": 3800,
+        "bid": 2.45,
+        "ask": 2.55,
+        "underlying": "NVDA",
+        "strike": 130.0,
+        "expiration_date": "2026-07-06",
+        "expiration_type": "standard",
+        "contract_size": 100,
+        "option_type": "put",
+        "greeks": {
+          "delta": -0.28,
+          "gamma": 0.018,
+          "theta": -0.09,
+          "vega": 0.18,
+          "mid_iv": 0.42
+        }
+      },
+      {
+        "symbol": "NVDA260706P00125000",
+        "description": "NVDA Jul 06 2026 $125 Put",
+        "exch": "CBOE",
+        "type": "put",
+        "last": 1.20,
+        "change": -0.05,
+        "volume": 850,
+        "open_interest": 2100,
+        "bid": 1.15,
+        "ask": 1.25,
+        "underlying": "NVDA",
+        "strike": 125.0,
+        "expiration_date": "2026-07-06",
+        "expiration_type": "standard",
+        "contract_size": 100,
+        "option_type": "put",
+        "greeks": {
+          "delta": -0.16,
+          "gamma": 0.012,
+          "theta": -0.07,
+          "vega": 0.14,
+          "mid_iv": 0.44
+        }
+      },
+      {
+        "symbol": "NVDA260706C00140000",
+        "description": "NVDA Jul 06 2026 $140 Call",
+        "exch": "CBOE",
+        "type": "call",
+        "last": 3.80,
+        "change": 0.20,
+        "volume": 2100,
+        "open_interest": 5200,
+        "bid": 3.75,
+        "ask": 3.85,
+        "underlying": "NVDA",
+        "strike": 140.0,
+        "expiration_date": "2026-07-06",
+        "expiration_type": "standard",
+        "contract_size": 100,
+        "option_type": "call",
+        "greeks": {
+          "delta": 0.32,
+          "gamma": 0.019,
+          "theta": -0.10,
+          "vega": 0.20,
+          "mid_iv": 0.41
+        }
+      }
+    ]
+  }
+}

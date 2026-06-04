@@ -1,0 +1,25 @@
+{
+  "vix": 18.4,
+  "vix_regime": "normal",
+  "vix_sizing": 1.0,
+  "spy_price": 542.10,
+  "spy_ma50": 535.0,
+  "spy_ma200": 510.0,
+  "spy_trend": "strong_uptrend",
+  "spy_hv20": 12.5,
+  "yield_10y": 4.28,
+  "tbill_3m": 5.10,
+  "dxy": 104.5,
+  "fear_greed_score": 61,
+  "fear_greed_label": "Greed",
+  "put_call_ratio": 0.82,
+  "market_sentiment": "BULLISH",
+  "structure_bias": "NEUTRAL_TO_DEBIT",
+  "macro_events": [
+    {"event": "CPI", "date": "2026-06-11", "days_away": 13, "alert": "WATCH"}
+  ],
+  "leading_sectors": ["XLK", "XLI"],
+  "lagging_sectors": ["XLU", "XLP"],
+  "sector_news": {},
+  "universe_size": 212
+}

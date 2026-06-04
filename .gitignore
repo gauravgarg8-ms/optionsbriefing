@@ -1,0 +1,23 @@
+# Environment
+.env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Generated output and runtime data
+logs/
+output/
+
+# Database files
+db/iv_history.db
+
+# macOS
+.DS_Store

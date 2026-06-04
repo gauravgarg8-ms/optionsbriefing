@@ -1,0 +1,5 @@
+[
+  {"symbol": "NVDA", "date": "2026-06-04", "eps": null, "epsEstimated": 0.72, "revenue": null, "revenueEstimated": 43200000000},
+  {"symbol": "AAPL", "date": "2026-06-10", "eps": null, "epsEstimated": 1.55, "revenue": null, "revenueEstimated": 95000000000},
+  {"symbol": "MSFT", "date": "2026-07-01", "eps": null, "epsEstimated": 3.10, "revenue": null, "revenueEstimated": 72000000000}
+]

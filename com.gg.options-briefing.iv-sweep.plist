@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd job for end-of-day IV sweep (full 516-ticker universe).
+  Runs at 4:15 PM ET Mon–Fri, after market close.
+
+  SETUP:
+    cp com.gg.options-briefing.iv-sweep.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.gg.options-briefing.iv-sweep.plist
+
+  Manual run:
+    .venv/bin/python db/iv_sweep.py
+-->
+<plist version="1.0">
+<dict>
+
+    <key>Label</key>
+    <string>com.gg.options-briefing.iv-sweep</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/.venv/bin/python</string>
+        <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/db/iv_sweep.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing</string>
+
+    <!-- Run Mon–Fri at 4:15 PM ET (hour=16, minute=15) -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>15</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>15</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>15</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>15</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>15</integer>
+        </dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/logs/launchd_iv_sweep_stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/gauravgarg/Documents/Personal/Trading/Options Trading/options-briefing/logs/launchd_iv_sweep_stderr.log</string>
+
+    <key>KeepAlive</key>
+    <false/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+</dict>
+</plist>
