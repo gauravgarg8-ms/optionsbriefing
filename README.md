@@ -1,6 +1,6 @@
 # Daily Options Briefing System
 
-A hybrid Python + Claude AI pipeline that delivers a professional pre-market options briefing every weekday at 8:00 AM ET. Python handles all data fetching, quantitative calculations, screening, scoring, and risk pre-computation. Claude AI writes the narrative interpretation only.
+A hybrid Python + Claude AI pipeline that delivers a professional pre-market options briefing every weekday at 7:30 AM ET. Python handles all data fetching, quantitative calculations, screening, scoring, and risk pre-computation. Claude AI writes the narrative interpretation only — it does zero math.
 
 ---
 
@@ -8,90 +8,134 @@ A hybrid Python + Claude AI pipeline that delivers a professional pre-market opt
 
 ```
 7:30 AM  Phase 1  data_engine.py         → raw_market_data.json
-7:35 AM  Phase 2  quant_engine.py        → quant_signals.json
-7:39 AM  Phase 3  screening_engine.py    → screened_candidates.json
-7:43 AM  Phase 4  risk_manager.py        → top_candidates.json (+ trade mgmt)
-7:45 AM  Phase 5  scenario_classifier.py → top_candidates.json (+ scenarios)
-7:46 AM  Phase 6  claude_interpreter.py  → Daily Briefing markdown
-8:00 AM  Phase 7  delivery.py            → YYYY-MM-DD_OptionsBrief.md
+         Phase 2A quant_engine.py        → lightweight signals (all 515 tickers)
+         Phase 2B screening_engine.py    → score + filter top 15 candidates
+         Phase 2C quant_engine.py        → deep fetch: options chain + B-S pricing
+         Phase 4  risk_manager.py        → trade management dates, PoP quality, sizing
+         Phase 5  scenario_classifier.py → active scenario flags (FOMC, earnings, VIX)
+         Phase 6  claude_interpreter.py  → Claude writes narrative only
+~7:37 AM Phase 7  delivery.py            → YYYY-MM-DD_OptionsBrief.txt
 ```
+
+Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetches with 1-second Finnhub rate-limit sleep).
 
 ---
 
 ## Supported Strategies
 
-| Code | Strategy | Type |
-|---|---|---|
-| `bull_put_spread` | Bull Put Spread | Credit spread |
-| `bear_call_spread` | Bear Call Spread | Credit spread |
-| `iron_condor` | Iron Condor | Credit spread |
-| `bull_call_spread` | Bull Call Spread | Debit spread |
-| `bear_put_spread` | Bear Put Spread | Debit spread |
-| `long_straddle` | Long Straddle | Debit vol play |
-| `long_strangle` | Long Strangle | Debit vol play |
-| `cash_secured_put` | Cash-Secured Put | Credit, cash required |
+| Code | Strategy | Type | When Selected |
+|---|---|---|---|
+| `bull_put_spread` | Bull Put Spread | Credit | IV Rank > 50%, Bullish |
+| `bear_call_spread` | Bear Call Spread | Credit | IV Rank > 50%, Bearish |
+| `iron_condor` | Iron Condor | Credit | IV Rank > 50%, Neutral |
+| `earnings_credit_spread` | Earnings Credit Spread | Credit | Earnings ≤7 days, implied move > hist avg |
+| `cash_secured_put` | Cash-Secured Put | Credit | Bullish income bias |
+| `bull_call_spread` | Bull Call Spread | Debit | IV Rank < 30%, Bullish |
+| `bear_put_spread` | Bear Put Spread | Debit | IV Rank < 30%, Bearish |
+| `long_straddle` | Long Straddle | Debit vol | IV Rank < 30%, Neutral or pre-earnings |
+| `long_strangle` | Long Strangle | Debit vol | IV Rank < 30%, wide strangle bias |
 
-**Covered call**: Claude flags manually when conditions are met. Not in automated selection.
+**PoP quality gates are structure-aware:**
+- Credit spreads: 60% floor (half-size 60–70%, full-size 70%+)
+- Debit spreads: 40% floor (half-size 40–50%, full-size 50%+) — ATM entry ≈ 50% is expected for debit structures
+
+**Covered call**: flagged in the briefing when conditions are met, not in automated selection (requires ownership status).
+
+---
+
+## Data Sources
+
+| Data | Source | Notes |
+|---|---|---|
+| S&P 500 / Nasdaq-100 universe | Wikipedia via `pd.read_html` | Falls back to local cache if offline |
+| Market caps | yfinance `Ticker.fast_info.market_cap` | ThreadPoolExecutor(8) |
+| Options chain | yfinance (primary), Tradier (if token set) | Pre-market: raw strikes used for B-S; bid/ask=0 is fine |
+| VIX, SPY, sector ETFs | yfinance batch download | |
+| T-bill rate (risk-free) | FRED `DTB3` series | |
+| Fear & Greed index | CNN endpoint → VIX proxy fallback | CNN blocks intermittently |
+| Put/Call ratio | CBOE date-specific CSV → SPY OI → VIX-based proxy | 3-tier fallback |
+| Earnings calendar | Finnhub `/calendar/earnings` | |
+| Macro calendar | FRED releases API + Federal Reserve FOMC page + BEA schedule | No Finnhub needed — multi-source, degrades gracefully |
+| Analyst ratings / news | Finnhub per-ticker | Per candidate in Phase 2C |
+| Unusual activity | Barchart scraper (BeautifulSoup) | Fragile — may break on HTML changes |
+| IV history | SQLite (`db/iv_history.db`) | Auto-seeded from HV20 proxy on cold start; real IV accumulates daily |
 
 ---
 
 ## Prerequisites
 
 - Python 3.11+
-- macOS (for launchd scheduling)
-- Free API accounts (see below)
+- macOS (for launchd scheduling; Linux users substitute `crontab`)
 
 ---
 
 ## API Keys Setup
 
+Create a `.env` file in the project root:
+
+```
+FINNHUB_API_KEY=your_key_here
+FRED_API_KEY=your_key_here
+NEWS_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
+
+# Optional
+TRADIER_TOKEN=your_token_here
+```
+
 ### Required
 
-| Service | Where to Get | `.env` Key |
+| Service | Where to Get | Key |
 |---|---|---|
-| Alpaca Markets | [alpaca.markets](https://alpaca.markets) — free paper account | `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` |
-| Financial Modeling Prep | [financialmodelingprep.com](https://financialmodelingprep.com) — free tier (250 req/day) | `FMP_API_KEY` |
 | Finnhub | [finnhub.io](https://finnhub.io) — free account (60 req/min) | `FINNHUB_API_KEY` |
 | FRED (St. Louis Fed) | [fred.stlouisfed.org/docs/api](https://fred.stlouisfed.org/docs/api/api_key.html) — free | `FRED_API_KEY` |
 | NewsAPI | [newsapi.org](https://newsapi.org) — free developer plan (100 req/day) | `NEWS_API_KEY` |
 | Anthropic | [console.anthropic.com](https://console.anthropic.com) — pay-per-token | `ANTHROPIC_API_KEY` |
 
-### Optional Upgrade
+### Optional
 
-| Service | Where to Get | `.env` Key | Benefit |
-|---|---|---|---|
-| Tradier | [developer.tradier.com](https://developer.tradier.com) — free developer sandbox | `TRADIER_TOKEN` | More reliable options chains; includes broker-quoted Greeks. Leave blank to use yfinance instead. |
+| Service | Key | Benefit |
+|---|---|---|
+| Tradier (sandbox) | `TRADIER_TOKEN` | More reliable options chains vs yfinance. Leave blank to use yfinance — no other changes needed. |
 
-> **Options data source**: yfinance is the default (no account needed). Set `TRADIER_TOKEN` to upgrade to Tradier automatically — the system detects the token and switches sources with no other changes required.
+> **FMP API is not used.** Financial Modeling Prep v3 endpoints return 403 for accounts created after August 2025. All data is sourced from Wikipedia, yfinance, Finnhub, FRED, and direct scraping.
+
+> **Alpaca API is not used.** Pre-market prices fall back to yfinance automatically.
 
 ---
 
 ## Installation
 
 ```bash
-# 1. Navigate to project directory
+# 1. Clone / navigate to the project
 cd "options-briefing"
 
-# 2. Install dependencies
+# 2. Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# 3. Set up API keys
+# 4. Set up API keys
 cp .env.example .env
-# Edit .env and fill in your API keys
+# Edit .env and fill in your keys
 
-# 4. Seed the IV history database (one-time, ~5 minutes)
-python db/seed_iv_history.py
+# 5. Run the pipeline (IV history is seeded automatically on first run)
+python main.py
 ```
+
+> IV Rank is computed from a rolling HV20 proxy on cold start and auto-seeds the database for all 515 tickers. No manual seeding step required. Real IV accumulates daily; IV Rank becomes fully reliable after ~30 trading days.
 
 ---
 
 ## Scheduling — macOS launchd
 
-The pipeline runs automatically at 7:30 AM ET on weekdays via macOS launchd. It will fire on wake even if the Mac was asleep at 7:30 AM.
+The pipeline runs automatically at 7:30 AM ET on weekdays. It fires on wake if the Mac was asleep at 7:30 AM.
 
 ```bash
-# 1. Edit the plist file — update paths for your machine
-open com.gg.options-briefing.plist
+# 1. Edit the plist file — update the path to match your machine
+nano com.gg.options-briefing.plist
 
 # 2. Copy to LaunchAgents
 cp com.gg.options-briefing.plist ~/Library/LaunchAgents/
@@ -102,7 +146,7 @@ launchctl load ~/Library/LaunchAgents/com.gg.options-briefing.plist
 # 4. Verify it is loaded
 launchctl list | grep options-briefing
 
-# To unload / stop:
+# To unload:
 launchctl unload ~/Library/LaunchAgents/com.gg.options-briefing.plist
 ```
 
@@ -110,10 +154,9 @@ launchctl unload ~/Library/LaunchAgents/com.gg.options-briefing.plist
 
 ## Manual Run
 
-Run the pipeline immediately regardless of schedule:
-
 ```bash
-python main.py
+cd "options-briefing"
+.venv/bin/python main.py
 ```
 
 ---
@@ -122,21 +165,28 @@ python main.py
 
 Briefing files are saved to:
 ```
-output/briefings/YYYY-MM-DD_OptionsBrief.md
+output/briefings/YYYY-MM-DD_OptionsBrief.txt
 ```
 
 Each file contains:
-- Market environment (VIX, SPY trend, sector rotation, macro events)
-- Up to 10 options trade setups with full B-S pricing tables
-- Trade management dates (21 DTE, profit target, stop loss)
-- Portfolio exposure check
+- Market environment (VIX regime, SPY trend, sector rotation, macro event calendar)
+- Up to 10 options trade setups with full B-S theoretical pricing tables
+- IV Data Quality row per candidate (real IV days / 30 threshold)
+- Trade management dates (21 DTE exit, profit target, stop loss)
+- PoP quality label — structure-aware (credit vs debit thresholds)
+- Portfolio exposure check and active scenario flags
 - Pre-trade checklist
 
 ---
 
 ## Logs
 
-Daily log files at `logs/YYYY-MM-DD.log`. Each entry includes a structured error code:
+| File | Contents |
+|---|---|
+| `logs/YYYY-MM-DD.log` | Structured pipeline log with error codes |
+| `logs/launchd_stderr.log` | Cumulative stderr from launchd runs |
+
+Error code ranges:
 
 | Range | Area |
 |---|---|
@@ -152,39 +202,40 @@ Daily log files at `logs/YYYY-MM-DD.log`. Each entry includes a structured error
 
 ```bash
 # Run all tests
-pytest tests/ -v
+.venv/bin/python -m pytest tests/ -q
 
-# Phase by phase
-pytest tests/test_universe_manager.py tests/test_market_data.py tests/test_technicals.py tests/test_db_manager.py -v
+# By phase
+pytest tests/test_universe_manager.py tests/test_market_data.py tests/test_macro_data.py tests/test_technicals.py tests/test_db_manager.py -v
 pytest tests/test_volatility.py tests/test_black_scholes.py tests/test_structure_selector.py tests/test_options_data.py -v
 pytest tests/test_data_engine.py -v
-pytest tests/test_screens.py tests/test_scorer.py tests/test_composition.py tests/test_screening_engine.py -v
+pytest tests/test_screens.py tests/test_scorer.py tests/test_quant_engine.py tests/test_screening_engine.py -v
 pytest tests/test_risk_manager.py tests/test_scenario_classifier.py tests/test_claude_interpreter.py tests/test_delivery.py -v
 ```
+
+> 8 pre-existing test failures in `test_claude_interpreter`, `test_db_manager`, and `test_options_data` (Tradier mock / SQLite edge cases). All pipeline logic tests pass.
 
 ---
 
 ## Important Caveats
 
-- **Black-Scholes outputs are theoretical only.** Always verify live mid-price and IV Rank on your broker (ThinkorSwim or IBKR) before placing any trade.
-- **IV Rank proxy**: For the first 30 days after setup, IV Rank is computed from a HV30 proxy. The briefing header shows `⚠️ IV RANK PROXY — N/30 days` until real IV data accumulates.
-- **IV Rank scale**: Barchart IV Rank ≠ ThinkorSwim IV Percentile. Both are valid but use the same source consistently.
+- **Black-Scholes outputs are theoretical only.** Always verify live mid-price and IV Rank on your broker before placing any trade.
+- **IV Rank proxy**: For the first ~30 trading days after setup, IV Rank is computed from a rolling HV20 proxy. The briefing shows `⚠️ Proxy only` in the IV Data Quality row for each candidate until real IV accumulates.
+- **Pre-market pricing**: The pipeline runs at 7:30 AM ET, before the options market opens at 9:30 AM. Bid/ask quotes are zero pre-open; the pipeline uses raw strike prices and B-S theoretical pricing instead. Always verify the live mid-price on your broker before entering.
+- **Degenerate spreads**: If a strike selection produces a zero-width spread (e.g., long strike = short strike due to limited chain data), the candidate is silently dropped before reaching Claude rather than shown as invalid.
 
 ---
 
 ## Oracle Cloud Upgrade Path
 
-When you decide to move from Mac to Oracle Cloud (recommended: Ampere A1, 4 cores, 24 GB RAM — always free):
+To move from Mac launchd to Oracle Cloud Always Free (4 ARM cores, 24 GB RAM):
 
 1. Provision an Oracle Cloud Always Free ARM VM
 2. `sudo apt update && sudo apt install python3.11 python3-pip -y`
-3. Clone / copy the project, `pip install -r requirements.txt`
-4. Copy your `.env` to the VM (never commit secrets to git)
-5. Replace launchd with crontab: `crontab -e` → add `30 7 * * 1-5 /usr/bin/python3 /path/to/main.py`
-6. Add Gmail SMTP email delivery to `delivery.py`:
-   - Add `DELIVERY_EMAIL_ENABLED=true`, `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` to `.env`
-7. Run `python db/seed_iv_history.py` once on the VM
-8. Test: `python main.py` — verify briefing is emailed before enabling cron
+3. Clone the project and `pip install -r requirements.txt`
+4. Copy `.env` to the VM (never commit secrets to git)
+5. Replace launchd with crontab: `crontab -e` → `30 7 * * 1-5 cd /path/to/options-briefing && .venv/bin/python main.py`
+6. Optionally add Gmail SMTP delivery to `delivery.py` (`GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` in `.env`)
+7. Test with `python main.py` before enabling cron
 
 ---
 
