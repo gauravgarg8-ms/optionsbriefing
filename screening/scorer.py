@@ -2,6 +2,8 @@
 0–100 scoring rubric + 7-signal confidence score.
 Section 9 of the architecture spec.
 """
+import math
+
 from loguru import logger
 from config import (
     SCORE_FLOOR, POP_FLOOR, LIQUIDITY_MAX_BID_ASK_PCT, LIQUIDITY_MIN_OI,
@@ -62,7 +64,8 @@ def compute_score(candidate: dict, market_env: dict) -> int:
     # ── 2. Trend & RS Alignment (20 pts) ─────────────────────────────────────
     above_50  = candidate.get("above_50ma", False)
     above_200 = candidate.get("above_200ma", False)
-    rs_20d    = candidate.get("rs_20d", 0)
+    _rs       = candidate.get("rs_20d", 0)
+    rs_20d    = 0.0 if (_rs is None or (isinstance(_rs, float) and math.isnan(_rs))) else _rs
     if not is_bearish:
         if above_50 and above_200 and rs_20d > 0:   score += 20
         elif above_50 and above_200:                  score += 14

@@ -1,6 +1,6 @@
 """
 Phase 7: Write the daily briefing file to disk.
-Output: output/briefings/YYYY-MM-DD_OptionsBrief.md
+Output: output/briefings/YYYY-MM-DD_OptionsBrief.txt
 Appends a metadata footer: date, pipeline duration, candidate count, model, IV proxy status.
 """
 import json
@@ -17,10 +17,9 @@ def write_briefing(
     briefing_text: str,
     top_candidates: dict,
     pipeline_start: datetime,
-    iv_proxy_days: int = 0,
 ) -> Path:
     """
-    Write briefing markdown to output/briefings/YYYY-MM-DD_OptionsBrief.md.
+    Write briefing to output/briefings/YYYY-MM-DD_OptionsBrief.txt.
     Returns the path of the written file.
     Logs E4003 and attempts fallback to current directory on write failure.
     """
@@ -29,19 +28,10 @@ def write_briefing(
     briefings_dir  = Path(OUTPUT_BRIEFINGS_DIR)
     output_path    = briefings_dir / filename
 
-    duration_secs  = (datetime.now() - pipeline_start).total_seconds()
+    duration_secs   = (datetime.now() - pipeline_start).total_seconds()
     candidate_count = len(top_candidates.get("candidates", []))
-    is_no_trade    = top_candidates.get("no_trade_day", False)
-    is_reduced     = top_candidates.get("reduced_opportunity_day", False)
-
-    # Build metadata footer
-    proxy_warning = ""
-    if iv_proxy_days < 30:
-        proxy_warning = (
-            f"\n> ⚠️ **IV RANK PROXY** — {iv_proxy_days}/30 days of real IV data accumulated. "
-            f"IV Rank values are approximated from HV30 history. "
-            f"Verify IV Rank independently on Barchart/TOS before trading."
-        )
+    is_no_trade     = top_candidates.get("no_trade_day", False)
+    is_reduced      = top_candidates.get("reduced_opportunity_day", False)
 
     day_type = "NO-TRADE DAY" if is_no_trade else ("REDUCED OPPORTUNITY" if is_reduced else "Standard")
     footer = (
@@ -50,8 +40,8 @@ def write_briefing(
         f"Pipeline: {duration_secs:.0f}s | "
         f"Setups: {candidate_count} | "
         f"Day type: {day_type} | "
-        f"Model: {CLAUDE_MODEL}*"
-        f"{proxy_warning}\n"
+        f"Model: {CLAUDE_MODEL}*\n"
+        f"> IV data quality shown per ticker in individual sections.\n"
     )
 
     full_content = briefing_text + footer

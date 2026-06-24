@@ -5,7 +5,12 @@ Adds trade management fields to each candidate so Claude only narrates — never
 from datetime import date, datetime, timedelta
 from loguru import logger
 
-from config import POP_FLOOR, POP_HALF_SIZE_THRESHOLD
+from config import (
+    POP_FLOOR, POP_HALF_SIZE_THRESHOLD,
+    POP_FLOOR_DEBIT, POP_HALF_SIZE_DEBIT_THRESHOLD,
+)
+
+_DEBIT_STRUCTURES = {"bull_call_spread", "bear_put_spread", "long_straddle", "long_strangle"}
 from errors import ErrorCode
 
 
@@ -56,19 +61,23 @@ def compute_trade_management(candidate: dict) -> dict:
         profit_target_usd = round(max_profit * 0.80, 2)
         stop_loss_usd     = round(max_loss, 2)
 
-    # ── PoP quality label ────────────────────────────────────────────────────
+    # ── PoP quality label (structure-aware floors) ───────────────────────────
+    is_debit  = structure in _DEBIT_STRUCTURES
+    pop_floor = POP_FLOOR_DEBIT if is_debit else POP_FLOOR
+    pop_half_threshold = POP_HALF_SIZE_DEBIT_THRESHOLD if is_debit else POP_HALF_SIZE_THRESHOLD
+
     if pop >= 0.80:
         pop_quality = "High"
     elif pop >= 0.70:
         pop_quality = "Good"
-    elif pop >= POP_FLOOR:          # 60–70% = Acceptable
+    elif pop >= pop_floor:
         pop_quality = "Acceptable"
     elif pop > 0:
-        pop_quality = "EXCLUDE"     # < 60% — golden rule already caught in scorer
+        pop_quality = "EXCLUDE"
     else:
         pop_quality = "N/A"
 
-    pop_half_size = POP_FLOOR <= pop < POP_HALF_SIZE_THRESHOLD   # 60–70% → half size
+    pop_half_size = pop_floor <= pop < pop_half_threshold
 
     return {
         **candidate,

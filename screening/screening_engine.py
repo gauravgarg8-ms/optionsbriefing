@@ -77,8 +77,9 @@ def run_screening(quant_data: dict, data_engine=None) -> dict:
         # Merge earnings info
         earn_info = td.get("earnings_info", {})
         c.update(earn_info)
-        # Run deep B-S calculations
-        if chain.get("options"):
+        # Run deep B-S calculations — always call so raw_options fallback works pre-market
+        # (run_deep_quant returns lightweight unchanged if expiry or raw_options are missing)
+        if chain.get("expiry") and (chain.get("options") or chain.get("raw_options")):
             c = run_deep_quant(ticker, c, chain, tbill_rate=tbill_rate)
         # Attach analyst/news/insider signals for sentiment gate pass 2
         c["recent_downgrade_days"] = _check_downgrade(td.get("analyst_ratings", []))
@@ -88,6 +89,13 @@ def run_screening(quant_data: dict, data_engine=None) -> dict:
         c["news_signal"]           = _top_news_sentiment(td.get("company_news", []))
         c["_leading_sectors"]      = market_env.get("leading_sectors", [])
         enriched.append(c)
+
+    # Drop candidates flagged as degenerate spreads (zero-width, zero-value) by run_deep_quant
+    valid_enriched = [c for c in enriched if not c.get("invalid_spread")]
+    skipped = len(enriched) - len(valid_enriched)
+    if skipped:
+        logger.warning(f"[Phase 3 — 2C] Dropped {skipped} candidate(s) with degenerate spreads")
+    enriched = valid_enriched
 
     # Re-apply sentiment gate with full data
     after_gate2 = apply_gate_to_pool(enriched, market_env)

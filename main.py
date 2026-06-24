@@ -121,6 +121,13 @@ def run_daily_briefing() -> None:
     active_scenarios = classify_scenarios(market_env, screened.get("candidates", []))
     screened["active_scenarios"] = active_scenarios
     screened["date"]             = today
+
+    # Attach per-candidate real_iv_days before Claude sees the payload.
+    from db.db_manager import DBManager
+    db = DBManager()
+    for c in screened.get("candidates", []):
+        c["real_iv_days"] = db.get_real_iv_days(c.get("ticker", ""))
+
     _save_json(screened, TOP_PATH)
     logger.info(f"[Phase 5] Complete in {(datetime.now()-phase_start).total_seconds():.1f}s")
     if _check_timeout(): return
@@ -136,19 +143,10 @@ def run_daily_briefing() -> None:
     phase_start = datetime.now()
     logger.info("[Phase 7] Writing briefing to disk...")
     from delivery import write_briefing
-    from db.db_manager import DBManager
-    # Determine IV proxy status for footer warning
-    db          = DBManager()
-    coverage    = db.get_db_coverage()
-    min_real_days = min(
-        (db.get_real_iv_days(t) for t in [c.get("ticker","") for c in screened.get("candidates",[])]),
-        default=0
-    )
     output_path = write_briefing(
         briefing_text  = briefing_text,
         top_candidates = screened,
         pipeline_start = pipeline_start,
-        iv_proxy_days  = min_real_days,
     )
     logger.info(f"[Phase 7] Complete — briefing at {output_path}")
 

@@ -8,6 +8,7 @@ Two-stage operation matching the HTML workflow:
 """
 
 import json
+import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -118,6 +119,9 @@ def run_deep_quant(ticker: str, lightweight: dict, chain_data: dict,
         if not expiry or not raw_options:
             return lightweight
 
+        # Always record expiry so risk_manager can compute date_21_dte even pre-market.
+        lightweight["expiry"] = expiry
+
         from quant.volatility import compute_iv30 as _compute_iv30
         iv30_real = _compute_iv30(raw_options)
         if iv30_real > 0:
@@ -134,10 +138,10 @@ def run_deep_quant(ticker: str, lightweight: dict, chain_data: dict,
                 )
             lightweight["iv_rv_ratio"] = compute_iv_rv_ratio(iv30_real, lightweight.get("hv20", 0) / 100)
 
-        # Strike selection and pricing require liquid options (valid bid/ask).
-        # Pre-market runs have empty liquid list — IV was already written above, return now.
-        if not options:
-            return lightweight
+        # Use raw_options for strike selection when liquid options are unavailable (pre-market).
+        # Strike prices in the chain are always valid; only bid/ask are stale/zero pre-market.
+        # B-S pricing is theoretical regardless, so this gives net_credit without needing live quotes.
+        options_for_strikes = options if options else raw_options
 
         T_days = _dte(expiry)
         T_yrs  = T_days / 365.0
@@ -150,17 +154,27 @@ def run_deep_quant(ticker: str, lightweight: dict, chain_data: dict,
             iv_rank=lightweight["iv_rank"],
             iv_rv_ratio=lightweight["iv_rv_ratio"],
             bias=bias,
+            earnings_flag=(lightweight.get("earnings_days_away") or 99) <= 7,
+            implied_move_pct=lightweight.get("implied_move_pct"),
+            hist_avg_move_pct=lightweight.get("hist_avg_move_pct"),
         )
         structure = apply_golden_rules(structure, lightweight["iv_rank"])
 
         strikes = select_strikes(
-            S=S, structure=structure, options=options,
+            S=S, structure=structure, options=options_for_strikes,
             iv30=sigma, T_days=T_days,
             support=lightweight.get("support", S * 0.95),
             resistance=lightweight.get("resistance", S * 1.05),
         )
 
         pricing = _price_structure(structure, S, strikes, T_yrs, r, sigma)
+
+        if _is_degenerate_pricing(pricing):
+            logger.warning(
+                f"[{ErrorCode.E2004}] {ticker}: zero-width spread (strikes={strikes}) — candidate flagged invalid"
+            )
+            lightweight["invalid_spread"] = True
+            return lightweight
 
         lightweight.update({
             "structure":    structure,
@@ -270,11 +284,27 @@ def _dte(expiry_str: str) -> int:
 
 
 def _infer_bias(signals: dict) -> str:
-    if signals.get("above_50ma") and signals.get("rs_20d", 0) > 0:
-        return "Bullish"
-    if not signals.get("above_50ma") and signals.get("rs_20d", 0) < 0:
-        return "Bearish"
+    _rs = signals.get("rs_20d")
+    rs_valid = _rs is not None and not (isinstance(_rs, float) and math.isnan(_rs))
+    above_50  = signals.get("above_50ma", False)
+    above_200 = signals.get("above_200ma", False)
+    if rs_valid:
+        if above_50 and _rs > 0:      return "Bullish"
+        if not above_50 and _rs < 0:  return "Bearish"
+    # Fallback to MA position when RS is unavailable
+    if above_50 and above_200:        return "Bullish"
+    if not above_50:                  return "Bearish"
     return "Neutral"
+
+
+def _is_degenerate_pricing(pricing: dict) -> bool:
+    """True when a spread has zero width (identical strikes) → max_profit and max_loss are both 0."""
+    if not pricing:
+        return True
+    return (
+        float(pricing.get("max_profit", 1) or 1) == 0 and
+        float(pricing.get("max_loss",   1) or 1) == 0
+    )
 
 
 def _price_structure(structure: str, S: float, strikes: dict,

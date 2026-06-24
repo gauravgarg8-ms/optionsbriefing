@@ -9,6 +9,22 @@ from errors import ErrorCode
 
 SECTOR_ETFS = ["XLK", "XLE", "XLF", "XLV", "XLU", "XLI", "XLB", "XLP"]
 
+# Maps SPDR sector ETF tickers to the GICS sector name strings used by Wikipedia
+# (which is the source for candidate.sector in universe_manager.py).
+_ETF_TO_GICS: dict[str, set[str]] = {
+    "XLK": {"Information Technology", "Technology", "EDP Services", "Semiconductors"},
+    "XLF": {"Financials", "Financial Services", "Banks"},
+    "XLV": {"Health Care", "Healthcare", "Biotechnology", "Pharmaceuticals"},
+    "XLU": {"Utilities"},
+    "XLI": {"Industrials"},
+    "XLE": {"Energy"},
+    "XLB": {"Materials"},
+    "XLP": {"Consumer Staples"},
+    "XLY": {"Consumer Discretionary"},
+    "XLC": {"Communication Services", "Telecommunication Services"},
+    "XLRE": {"Real Estate"},
+}
+
 
 def fetch_vix_spy() -> dict:
     """
@@ -83,16 +99,27 @@ def fetch_sector_rotation() -> dict:
         leading      = sorted_etfs[:3]
         lagging      = sorted_etfs[-3:]
 
+        leading_names = set().union(*[_ETF_TO_GICS.get(e, set()) for e in leading])
+        lagging_names = set().union(*[_ETF_TO_GICS.get(e, set()) for e in lagging])
+
         logger.info(f"Sector rotation — leading: {leading}, lagging: {lagging}")
         return {
-            "sector_returns": returns,
-            "leading_sectors": leading,
-            "lagging_sectors": lagging,
+            "sector_returns":       returns,
+            "leading_sectors":      leading,
+            "lagging_sectors":      lagging,
+            "leading_sector_names": leading_names,
+            "lagging_sector_names": lagging_names,
         }
 
     except Exception as e:
         logger.error(f"[{ErrorCode.E1004}] Sector ETF fetch failed: {e}")
-        return {"sector_returns": {}, "leading_sectors": [], "lagging_sectors": []}
+        return {
+            "sector_returns":       {},
+            "leading_sectors":      [],
+            "lagging_sectors":      [],
+            "leading_sector_names": set(),
+            "lagging_sector_names": set(),
+        }
 
 
 def fetch_premarket_prices(tickers: list[str]) -> dict[str, float]:

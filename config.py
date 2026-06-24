@@ -4,14 +4,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── API Keys ────────────────────────────────────────────────────────────────
-ALPACA_API_KEY    = os.getenv("ALPACA_API_KEY", "")
-ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY", "")
-TRADIER_TOKEN     = os.getenv("TRADIER_TOKEN", "")
-FMP_API_KEY       = os.getenv("FMP_API_KEY", "")
-FINNHUB_API_KEY   = os.getenv("FINNHUB_API_KEY", "")
-FRED_API_KEY      = os.getenv("FRED_API_KEY", "")
-NEWS_API_KEY      = os.getenv("NEWS_API_KEY", "")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ALPACA_API_KEY              = os.getenv("ALPACA_API_KEY", "")
+ALPACA_SECRET_KEY           = os.getenv("ALPACA_SECRET_KEY", "")
+TRADIER_TOKEN               = os.getenv("TRADIER_TOKEN", "")
+FMP_API_KEY                 = os.getenv("FMP_API_KEY", "")
+FINNHUB_API_KEY             = os.getenv("FINNHUB_API_KEY", "")
+FRED_API_KEY                = os.getenv("FRED_API_KEY", "")
+NEWS_API_KEY                = os.getenv("NEWS_API_KEY", "")
+ANTHROPIC_API_KEY           = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ── API Endpoints ────────────────────────────────────────────────────────────
 FMP_BASE          = "https://financialmodelingprep.com/api/v3"
@@ -27,6 +27,11 @@ NEWS_API_BASE     = "https://newsapi.org/v2"
 CBOE_PC_URL       = "https://cdn.cboe.com/data/us/options/market_statistics/daily/"
 CNN_FG_URL        = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 BARCHART_UA_URL   = "https://www.barchart.com/options/unusual-activity/stocks"
+
+# ── Macro Calendar Sources ────────────────────────────────────────────────────
+FED_FOMC_URL      = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+BLS_SCHEDULE_URL  = "https://www.bls.gov/schedule/news_release/"
+BEA_SCHEDULE_URL  = "https://www.bea.gov/news/schedule"
 
 # ── FRED Series ─────────────────────────────────────────────────────────────
 FRED_TBILL_SERIES = "DTB3"
@@ -61,8 +66,10 @@ SCORE_HIGH_CONFIDENCE   = 65
 MIN_CANDIDATES_FOR_TRADE = 5
 
 # ── Golden Rules ─────────────────────────────────────────────────────────────
-POP_FLOOR               = 0.60
-POP_HALF_SIZE_THRESHOLD = 0.70
+POP_FLOOR               = 0.60   # credit spreads: min PoP to trade
+POP_HALF_SIZE_THRESHOLD = 0.70   # credit spreads: PoP below this → half size
+POP_FLOOR_DEBIT               = 0.40   # debit spreads: min PoP to trade (ATM entry ≈ 50% is normal)
+POP_HALF_SIZE_DEBIT_THRESHOLD = 0.50   # debit spreads: PoP below this → half size
 LIQUIDITY_MAX_BID_ASK_PCT = 0.10   # 10%
 LIQUIDITY_MIN_OI          = 500
 
@@ -91,5 +98,5 @@ CLAUDE_MAX_TOKENS   = 25000
 CLAUDE_MAX_RETRIES  = 3
 PIPELINE_TIMEOUT_MINS = 30
 
-OUTPUT_FILENAME_PATTERN = "{date}_OptionsBrief.md"
+OUTPUT_FILENAME_PATTERN = "{date}_OptionsBrief.txt"
 OUTPUT_BRIEFINGS_DIR    = "output/briefings"

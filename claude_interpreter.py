@@ -38,7 +38,14 @@ YOUR RESPONSIBILITIES:
 
 4. **For EACH candidate**, write:
    a. Trade thesis (2 sentences: why this stock, why this structure, why today)
-   b. Full data table using JSON values verbatim — do NOT change any numbers
+   b. Full data table using JSON values verbatim — do NOT change any numbers.
+      The table MUST include a row for **IV Data Quality** using the `real_iv_days` field:
+      - Format: "X/30 real IV days — [interpretation]"
+      - Interpretation rules:
+        • 0–9 days  → "⚠️ Proxy only — IV Rank computed from HV30 history, not live options IV. Verify on broker."
+        • 10–19 days → "⚠️ Partial history — IV Rank improving but not yet fully reliable. Verify on broker."
+        • 20–29 days → "IV Rank mostly reliable — approaching full 30-day real history."
+        • 30+ days  → "✅ Full real IV history — IV Rank computed from live options data."
    c. B-S theoretical trade setup table — ALWAYS prefix with: ⚠️ B-S THEORETICAL — verify live mid-price on broker before entry
    d. Greeks, Risk/Reward & Expectancy — show d1/d2 values, PoP formula, EV calculation
    e. Trade management section using pre-computed dates/prices from JSON verbatim
@@ -67,7 +74,6 @@ If no_trade_day=true OR reduced_opportunity_day=true:
 
 TONE: Professional but educational. Always explain the WHY behind every number.
 Show d1/d2 and the PoP formula used. Never invent numbers — use the JSON values exactly.
-If the IV RANK PROXY warning is present in the JSON, include it prominently.
 """
 
 

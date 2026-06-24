@@ -9,11 +9,19 @@ Usage:
     .venv/bin/python db/iv_sweep.py
 """
 
+import resource
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
+
+# Raise soft fd limit before any imports open SQLite/network connections.
+# launchd default is 256; 20 parallel yfinance+SQLite threads exhaust this fast.
+_soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+if _soft < 4096:
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(4096, _hard), _hard))
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -27,8 +35,8 @@ from quant.volatility import compute_iv30
 _LOG_PATH = Path(__file__).parent.parent / "logs" / f"iv_sweep_{date.today().isoformat()}.log"
 logger.add(str(_LOG_PATH), rotation="1 day", retention="30 days", level="INFO")
 
-_MAX_WORKERS  = 20
-_BATCH_SLEEP  = 0.0   # no forced sleep; yfinance handles its own throttling
+_MAX_WORKERS = 20
+_db_lock     = threading.Lock()   # serialize SQLite writes; fetches remain parallel
 
 
 def _sweep_ticker(ticker: str, db: DBManager) -> tuple[str, bool]:
@@ -43,7 +51,8 @@ def _sweep_ticker(ticker: str, db: DBManager) -> tuple[str, bool]:
         if iv30 <= 0:
             return ticker, False
 
-        db.upsert_iv_with_source(ticker, date.today().isoformat(), iv30, source="real")
+        with _db_lock:
+            db.upsert_iv_with_source(ticker, date.today().isoformat(), iv30, source="real")
         return ticker, True
     except Exception as e:
         logger.warning(f"iv_sweep failed for {ticker}: {e}")

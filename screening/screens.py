@@ -3,6 +3,8 @@ Screens 1–4: pool builders for candidate selection.
 Step 0 (prefilter) is handled by universe_manager.prefilter_universe().
 Screens operate on the lightweight quant_signals dict.
 """
+import math
+
 from loguru import logger
 from config import (
     MAX_CANDIDATES_PER_POOL,
@@ -49,7 +51,13 @@ def screen_earnings(candidates: list[dict], earnings_calendar: list[dict]) -> li
             continue
         if c.get("avg_options_vol", 0) <= SCREEN_EARNINGS_MIN_OPTIONS_VOL:
             continue
+        # implied_move_pct is a deep-fetch field unavailable in Phase 2A.
+        # Fall back to a HV20-based estimate so earnings plays aren't silently dropped.
         implied = c.get("implied_move_pct", 0) or 0
+        if implied <= 0:
+            days_away = earnings_tickers[ticker].get("days_away", 7)
+            hv = c.get("hv20", 0) / 100
+            implied = hv * math.sqrt(max(days_away, 1) / 252) if hv > 0 else 0
         if implied < SCREEN_EARNINGS_MIN_IMPLIED_MOVE:
             continue
         passed.append({**c, "earnings_days_away": earnings_tickers[ticker]["days_away"],
@@ -66,15 +74,17 @@ def screen_low_iv_trend(candidates: list[dict], market_env: dict) -> list[dict]:
     Screen 3: Low IV / Trend Pool.
     Criteria: IV Rank < 30%, above 50d+200d MA, positive RS vs SPY, in leading sectors.
     """
-    max_count      = MAX_CANDIDATES_PER_POOL["low_iv_trend"]
-    leading_sectors = market_env.get("leading_sectors", [])
+    max_count            = MAX_CANDIDATES_PER_POOL["low_iv_trend"]
+    # leading_sector_names contains GICS strings ("Information Technology", "Financials", …)
+    # which match candidate.sector from Wikipedia. leading_sectors is ETF symbols — wrong type.
+    leading_sector_names = market_env.get("leading_sector_names", set())
     passed = [
         c for c in candidates
         if c.get("iv_rank", 100) < IV_RANK_DEBIT_MAX
         and c.get("above_50ma", False)
         and c.get("above_200ma", False)
         and c.get("rs_20d", 0) > 0
-        and c.get("sector", "") in leading_sectors
+        and c.get("sector", "") in leading_sector_names
     ]
     passed.sort(key=lambda x: x.get("rs_20d", 0), reverse=True)
     result = passed[:max_count]
@@ -87,12 +97,13 @@ def screen_bearish(candidates: list[dict], market_env: dict) -> list[dict]:
     Screen 4: Bearish Pool.
     Criteria: below 50d MA, in lagging sectors, negative RS vs SPY.
     """
-    max_count      = MAX_CANDIDATES_PER_POOL["bearish"]
-    lagging_sectors = market_env.get("lagging_sectors", [])
+    max_count             = MAX_CANDIDATES_PER_POOL["bearish"]
+    # lagging_sector_names contains GICS strings matching candidate.sector from Wikipedia.
+    lagging_sector_names  = market_env.get("lagging_sector_names", set())
     passed = [
         c for c in candidates
         if not c.get("above_50ma", True)
-        and c.get("sector", "") in lagging_sectors
+        and c.get("sector", "") in lagging_sector_names
         and c.get("rs_20d", 0) < 0
     ]
     passed.sort(key=lambda x: x.get("rs_20d", 0))   # most negative RS first

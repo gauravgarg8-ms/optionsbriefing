@@ -26,7 +26,7 @@ class TestWriteBriefing:
                 top_candidates = _make_top_candidates(),
                 pipeline_start = datetime.now(),
             )
-        assert f"{today}_OptionsBrief.md" in str(path)
+        assert f"{today}_OptionsBrief.txt" in str(path)
 
     def test_briefing_text_written(self, tmp_path):
         with __import__("unittest.mock", fromlist=["patch"]).patch(
@@ -53,7 +53,7 @@ class TestWriteBriefing:
         assert "Generated:" in content
         assert "Setups: 5" in content
 
-    def test_iv_proxy_warning_shown_when_cold_start(self, tmp_path):
+    def test_iv_data_quality_pointer_in_footer(self, tmp_path):
         with __import__("unittest.mock", fromlist=["patch"]).patch(
             "delivery.OUTPUT_BRIEFINGS_DIR", str(tmp_path)
         ):
@@ -61,24 +61,9 @@ class TestWriteBriefing:
                 briefing_text  = "Content",
                 top_candidates = _make_top_candidates(),
                 pipeline_start = datetime.now(),
-                iv_proxy_days  = 5,   # < 30 → show proxy warning
             )
         content = path.read_text()
-        assert "IV RANK PROXY" in content
-        assert "5/30" in content
-
-    def test_no_iv_proxy_warning_after_30_days(self, tmp_path):
-        with __import__("unittest.mock", fromlist=["patch"]).patch(
-            "delivery.OUTPUT_BRIEFINGS_DIR", str(tmp_path)
-        ):
-            path = write_briefing(
-                briefing_text  = "Content",
-                top_candidates = _make_top_candidates(),
-                pipeline_start = datetime.now(),
-                iv_proxy_days  = 35,   # ≥ 30 → no proxy warning
-            )
-        content = path.read_text()
-        assert "IV RANK PROXY" not in content
+        assert "IV data quality shown per ticker" in content
 
     def test_no_trade_day_in_footer(self, tmp_path):
         with __import__("unittest.mock", fromlist=["patch"]).patch(

@@ -13,7 +13,14 @@ def _make_candidate(ticker, iv_rank=60, price=50, avg_vol=5000,
     }
 
 
-MARKET_ENV = {"leading_sectors": ["XLK", "XLI"], "lagging_sectors": ["XLU", "XLP"]}
+MARKET_ENV = {
+    "leading_sectors":      ["XLK", "XLI"],
+    "lagging_sectors":      ["XLU", "XLP"],
+    # GICS sector name sets derived from the ETF→GICS mapping in market_data.py
+    "leading_sector_names": {"Information Technology", "Technology", "EDP Services",
+                             "Semiconductors", "Industrials"},
+    "lagging_sector_names": {"Utilities", "Consumer Staples"},
+}
 
 
 class TestScreenHighIV:
@@ -84,7 +91,7 @@ class TestScreenEarnings:
 class TestScreenLowIVTrend:
     def test_passes_low_iv_trend_candidate(self):
         candidates = [_make_candidate("MSFT", iv_rank=20, above_50=True,
-                                       above_200=True, rs_20d=3.0, sector="XLK")]
+                                       above_200=True, rs_20d=3.0, sector="Information Technology")]
         result = screen_low_iv_trend(candidates, MARKET_ENV)
         assert len(result) == 1
         assert result[0]["screen_pool"] == "low_iv_trend"
@@ -110,7 +117,7 @@ class TestScreenLowIVTrend:
 
 class TestScreenBearish:
     def test_passes_bearish_candidate(self):
-        candidates = [_make_candidate("D", above_50=False, rs_20d=-3.0, sector="XLU")]
+        candidates = [_make_candidate("D", above_50=False, rs_20d=-3.0, sector="Utilities")]
         result = screen_bearish(candidates, MARKET_ENV)
         assert len(result) == 1
         assert result[0]["screen_pool"] == "bearish"

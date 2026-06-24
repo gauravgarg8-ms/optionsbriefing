@@ -155,15 +155,21 @@ def select_strikes(
             return {"k_short": k_short, "k_long": k_long, "expiry": expiry, "dte": T_days}
 
         if structure == "bear_call_spread":
+            stride  = (strikes[-1] - strikes[-2]) if len(strikes) > 1 else 5
             k_short = nearest_strike(S + sd_move)
             k_long  = nearest_strike(k_short + 5)
+            k_long  = max(k_long, k_short + stride)   # mirror bull_put guard: ensure k_long > k_short
             return {"k_short": k_short, "k_long": k_long, "expiry": expiry, "dte": T_days}
 
         if structure == "iron_condor":
+            put_stride  = (strikes[1]  - strikes[0])  if len(strikes) > 1 else 5
+            call_stride = (strikes[-1] - strikes[-2]) if len(strikes) > 1 else 5
             k_put_short  = nearest_strike(S - sd_move)
             k_put_long   = nearest_strike(k_put_short - 5)
+            k_put_long   = min(k_put_long, k_put_short - put_stride)    # ensure k_put_long < k_put_short
             k_call_short = nearest_strike(S + sd_move)
             k_call_long  = nearest_strike(k_call_short + 5)
+            k_call_long  = max(k_call_long, k_call_short + call_stride) # ensure k_call_long > k_call_short
             return {"k_put_short": k_put_short, "k_put_long": k_put_long,
                     "k_call_short": k_call_short, "k_call_long": k_call_long,
                     "expiry": expiry, "dte": T_days}
