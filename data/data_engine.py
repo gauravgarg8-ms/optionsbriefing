@@ -22,13 +22,15 @@ from data.sentiment_data import (
     fetch_company_news, fetch_sector_news, classify_market_sentiment,
 )
 from data.unusual_activity import fetch_unusual_activity
-from data.options_data import fetch_options_chain, filter_liquid_strikes
+from data.options_data import fetch_options_chain, fetch_0dte_chain, filter_liquid_strikes
 from data.earnings_data import (
     fetch_earnings_calendar, fetch_earnings_history, fetch_analyst_ratings,
     fetch_insider_transactions, compute_implied_move, compute_hist_avg_move,
     classify_earnings_candidate,
 )
-from config import DEEP_FETCH_SLEEP_SECS
+from config import DEEP_FETCH_SLEEP_SECS, PINNED_TICKERS
+
+_FORCE_0DTE_SYMBOLS = {entry["symbol"] for entry in PINNED_TICKERS if entry.get("force_dte_0")}
 from errors import ErrorCode
 
 OUTPUT_RAW = Path(__file__).parent.parent / "output" / "raw_market_data.json"
@@ -44,6 +46,13 @@ def run_data_collection() -> dict:
 
     # ── Universe ─────────────────────────────────────────────────────────────
     universe_raw = build_universe()
+
+    # Force-add pinned tickers (e.g., SPY) if not already in the universe
+    existing_symbols = {r.get("symbol", r.get("ticker", "")) for r in universe_raw}
+    for entry in PINNED_TICKERS:
+        if entry["symbol"] not in existing_symbols:
+            universe_raw.append(entry)
+
     price_data   = {}
     if universe_raw:
         tickers      = [r.get("symbol", r.get("ticker", "")) for r in universe_raw]
@@ -118,8 +127,11 @@ def deep_fetch(tickers: list[str], earnings_calendar: list[dict]) -> dict[str, d
     for i, ticker in enumerate(tickers):
         ticker_data = {}
         try:
-            # Options chain (Tradier with yfinance fallback)
-            chain_raw = fetch_options_chain(ticker)
+            # Options chain — 0DTE path for pinned tickers (e.g. SPY), standard otherwise
+            if ticker in _FORCE_0DTE_SYMBOLS:
+                chain_raw = fetch_0dte_chain(ticker)
+            else:
+                chain_raw = fetch_options_chain(ticker)
             raw       = chain_raw.get("options", [])
             liquid    = filter_liquid_strikes(raw)
             ticker_data["chain"] = {

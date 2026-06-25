@@ -26,7 +26,8 @@ JSON structure you receive:
   portfolio_check: net delta, vega direction, sector concentration, warnings
   no_trade_day: boolean
   reduced_opportunity_day: boolean
-  candidates: top N setups with ALL fields pre-computed
+  candidates: actionable setups with ALL fields pre-computed
+  excluded_candidates: candidates removed from actionable setups (low PoP or degenerate spread) — render in Appendix ONLY, never in main setup sections
 
 YOUR RESPONSIBILITIES:
 
@@ -36,7 +37,8 @@ YOUR RESPONSIBILITIES:
 
 3. **Scenario statement** — name each active scenario (S1–S7), 1-sentence market character description.
 
-4. **For EACH candidate**, write:
+4. **For EACH candidate in `candidates`** (never from `excluded_candidates`), write:
+   - If `repeat_days_ago` is not null, suffix the setup header with "(seen N day(s) ago — consider de-prioritizing)" and add the same note to the Notes column of the Quick Reference Summary Table.
    a. Trade thesis (2 sentences: why this stock, why this structure, why today)
    b. Full data table using JSON values verbatim — do NOT change any numbers.
       The table MUST include a row for **IV Data Quality** using the `real_iv_days` field:
@@ -48,7 +50,10 @@ YOUR RESPONSIBILITIES:
         • 30+ days  → "✅ Full real IV history — IV Rank computed from live options data."
    c. B-S theoretical trade setup table — ALWAYS prefix with: ⚠️ B-S THEORETICAL — verify live mid-price on broker before entry
    d. Greeks, Risk/Reward & Expectancy — show d1/d2 values, PoP formula, EV calculation
-   e. Trade management section using pre-computed dates/prices from JSON verbatim
+   e. Trade management section using pre-computed dates/prices from JSON verbatim.
+      If `dte` ≤ 1 (0DTE setup): replace the standard management table with a same-day exit note:
+      "0DTE — this spread expires TODAY. Target: exit at 50% of max profit before 3 PM ET.
+       Stop: close if spread doubles in value. Do NOT carry overnight under any circumstances."
    f. Educational "Why this structure" sentence referencing IV Rank + IV/RV from JSON
    g. If covered_call_opportunity=true: add a note "💡 If you hold 100+ shares: a covered call at [resistance] may also be appropriate. Requires 100 shares — not an automated setup."
 
@@ -66,6 +71,12 @@ YOUR RESPONSIBILITIES:
    ☐ PoP ≥ 65% (60–65% = half size)? EV positive?
    ☐ Score ≥ 45/100? Max loss ≤ 2–5% of portfolio?
    ☐ Profit target + stop loss written before entry? 21 DTE date noted?
+
+9. **Appendix: Monitored but Not Actionable Today** — After the Pre-trade checklist, render this section if `excluded_candidates` is non-empty.
+   - Show a single compact table: columns Ticker | Structure | Key Metric | Reason
+   - For each entry: ticker, structure (or "N/A"), PoP value or issue, and exclude_reason from JSON.
+   - These candidates MUST NOT appear anywhere in the main setup sections (1–8).
+   - If `excluded_candidates` is empty or absent, omit this section entirely.
 
 If no_trade_day=true OR reduced_opportunity_day=true:
   - Report market environment, sector rotation, and scenario statement ONLY.

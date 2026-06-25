@@ -92,6 +92,15 @@ DEEP_FETCH_DTE_MIN    = 25
 DEEP_FETCH_DTE_MAX    = 45
 DEEP_FETCH_SLEEP_SECS = 1   # between tickers — Finnhub 60 req/min guard
 
+# ── Pinned Tickers (always included in briefing regardless of screens) ────────
+PINNED_TICKERS = [{"symbol": "SPY", "sector": "Index ETF", "name": "SPDR S&P 500 ETF", "force_dte_0": True}]
+
+# ── Repeat Ticker History ─────────────────────────────────────────────────────
+TICKER_HISTORY_WINDOW_DAYS = 7  # days to look back when flagging repeat appearances
+
+# ── Half-Size Score Override ──────────────────────────────────────────────────
+POP_HALF_SIZE_SCORE_OVERRIDE = 70  # full size allowed if score >= this, even at low PoP
+
 # ── Claude / Output ───────────────────────────────────────────────────────────
 CLAUDE_MODEL        = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS   = 25000

@@ -8,13 +8,16 @@ A hybrid Python + Claude AI pipeline that delivers a professional pre-market opt
 
 ```
 7:30 AM  Phase 1  data_engine.py         → raw_market_data.json
-         Phase 2A quant_engine.py        → lightweight signals (all 515 tickers)
+         Phase 2A quant_engine.py        → lightweight signals (all ~515 tickers + SPY)
          Phase 2B screening_engine.py    → score + filter top 15 candidates
          Phase 2C quant_engine.py        → deep fetch: options chain + B-S pricing
+                                            SPY uses 0DTE chain (today's expiry)
          Phase 4  risk_manager.py        → trade management dates, PoP quality, sizing
+                                            0DTE candidates get same-day exit labels
          Phase 5  scenario_classifier.py → active scenario flags (FOMC, earnings, VIX)
          Phase 6  claude_interpreter.py  → Claude writes narrative only
 ~7:37 AM Phase 7  delivery.py            → YYYY-MM-DD_OptionsBrief.txt
+                                            ticker_history.json updated
 ```
 
 Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetches with 1-second Finnhub rate-limit sleep).
@@ -37,9 +40,39 @@ Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetche
 
 **PoP quality gates are structure-aware:**
 - Credit spreads: 60% floor (half-size 60–70%, full-size 70%+)
-- Debit spreads: 40% floor (half-size 40–50%, full-size 50%+) — ATM entry ≈ 50% is expected for debit structures
+- Debit spreads: 40% floor (half-size 40–50%, full-size 50%+)
+
+**Half-size score override:** A debit or credit spread with PoP in the half-size range is promoted to full size when the candidate's score ≥ 70/100. High-conviction setups are not penalized for structurally expected low PoP.
 
 **Covered call**: flagged in the briefing when conditions are met, not in automated selection (requires ownership status).
+
+---
+
+## Pinned Tickers
+
+Certain tickers are included in every briefing regardless of screening results. Currently:
+
+| Ticker | Type | DTE | Rationale |
+|---|---|---|---|
+| `SPY` | Index ETF | 0DTE | Daily market-directional anchor; uses same-day expiry (Mon/Wed/Fri). Falls back to nearest ≤2-day expiry if today is not an SPY expiry day. |
+
+Pinned tickers bypass Screens 1–4 and the score floor. They go directly into Phase 2C deep fetch and are subject to the same B-S pricing, PoP gates, and trade management as regular candidates.
+
+To add more pinned tickers, edit `PINNED_TICKERS` in `config.py`.
+
+---
+
+## Candidate Output
+
+Each run produces up to 10 actionable setups plus a monitored-but-not-actionable appendix.
+
+**Actionable candidates** meet all of: score ≥ 45/100, PoP ≥ floor, non-degenerate spread.
+
+**Appendix candidates** are shown at the bottom of the briefing (not in the main setup sections) when:
+- PoP falls below the minimum floor → `pop_quality = "EXCLUDE"`
+- The spread is degenerate (zero-width or zero-value strikes)
+
+**Repeat ticker flags:** Any ticker that appeared in an actionable setup within the last 7 trading days is flagged with "(seen N day(s) ago — consider de-prioritizing)" in both the setup header and the Quick Reference Summary Table. History is persisted in `output/ticker_history.json`.
 
 ---
 
@@ -49,7 +82,8 @@ Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetche
 |---|---|---|
 | S&P 500 / Nasdaq-100 universe | Wikipedia via `pd.read_html` | Falls back to local cache if offline |
 | Market caps | yfinance `Ticker.fast_info.market_cap` | ThreadPoolExecutor(8) |
-| Options chain | yfinance (primary), Tradier (if token set) | Pre-market: raw strikes used for B-S; bid/ask=0 is fine |
+| Options chain (standard) | yfinance (primary), Tradier (if token set) | DTE 25–45 day range |
+| Options chain (0DTE / SPY) | yfinance — today's expiry | Selects same-day expiry; falls back to nearest ≤2-day expiry |
 | VIX, SPY, sector ETFs | yfinance batch download | |
 | T-bill rate (risk-free) | FRED `DTB3` series | |
 | Fear & Greed index | CNN endpoint → VIX proxy fallback | CNN blocks intermittently |
@@ -59,6 +93,7 @@ Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetche
 | Analyst ratings / news | Finnhub per-ticker | Per candidate in Phase 2C |
 | Unusual activity | Barchart scraper (BeautifulSoup) | Fragile — may break on HTML changes |
 | IV history | SQLite (`db/iv_history.db`) | Auto-seeded from HV20 proxy on cold start; real IV accumulates daily |
+| Ticker history | `output/ticker_history.json` | Rolling 7-day window; used for repeat-ticker flagging |
 
 ---
 
@@ -125,7 +160,7 @@ cp .env.example .env
 python main.py
 ```
 
-> IV Rank is computed from a rolling HV20 proxy on cold start and auto-seeds the database for all 515 tickers. No manual seeding step required. Real IV accumulates daily; IV Rank becomes fully reliable after ~30 trading days.
+> IV Rank is computed from a rolling HV20 proxy on cold start and auto-seeds the database for all ~515 tickers. No manual seeding step required. Real IV accumulates daily; IV Rank becomes fully reliable after ~30 trading days.
 
 ---
 
@@ -170,12 +205,26 @@ output/briefings/YYYY-MM-DD_OptionsBrief.txt
 
 Each file contains:
 - Market environment (VIX regime, SPY trend, sector rotation, macro event calendar)
+- SPY 0DTE setup (pinned daily, same-day expiry, same-day exit management)
 - Up to 10 options trade setups with full B-S theoretical pricing tables
+- Repeat ticker flags — "(seen N day(s) ago — consider de-prioritizing)" when a ticker appeared in a recent briefing
 - IV Data Quality row per candidate (real IV days / 30 threshold)
-- Trade management dates (21 DTE exit, profit target, stop loss)
-- PoP quality label — structure-aware (credit vs debit thresholds)
+- Trade management dates (21 DTE exit, profit target, stop loss; 0DTE candidates show "exit before market close today")
+- PoP quality label — structure-aware (credit vs debit thresholds); high-score override for score ≥ 70
 - Portfolio exposure check and active scenario flags
 - Pre-trade checklist
+- **Appendix: Monitored but Not Actionable Today** — candidates excluded due to low PoP or degenerate spreads, shown in a compact table separate from actionable setups
+
+Other output files:
+
+| File | Contents |
+|---|---|
+| `output/ticker_history.json` | Rolling 7-day history of actionable tickers; used for repeat-ticker flagging |
+| `output/screened_candidates.json` | Phase 3 output before trade management |
+| `output/top_candidates.json` | Full payload sent to Claude (includes excluded_candidates) |
+| `output/raw_market_data.json` | Phase 1 raw data snapshot |
+| `output/quant_signals.json` | Phase 2A lightweight quant for all tickers |
+| `output/universe_cache.json` | Last successful Wikipedia universe fetch |
 
 ---
 
@@ -216,12 +265,31 @@ pytest tests/test_risk_manager.py tests/test_scenario_classifier.py tests/test_c
 
 ---
 
+## Key Config Constants (`config.py`)
+
+| Constant | Default | Purpose |
+|---|---|---|
+| `PINNED_TICKERS` | `[SPY, force_dte_0=True]` | Always-included tickers; bypass screening gates |
+| `TICKER_HISTORY_WINDOW_DAYS` | `7` | Days to look back for repeat-ticker flags |
+| `POP_HALF_SIZE_SCORE_OVERRIDE` | `70` | Score threshold above which half-size is waived |
+| `SCORE_FLOOR` | `45` | Minimum score to appear in briefing |
+| `SCORE_HIGH_CONFIDENCE` | `65` | Threshold for "reduced opportunity day" flag |
+| `POP_FLOOR` | `0.60` | Credit spreads: minimum PoP to be actionable |
+| `POP_HALF_SIZE_THRESHOLD` | `0.70` | Credit spreads: PoP below this → half size (unless score ≥ 70) |
+| `POP_FLOOR_DEBIT` | `0.40` | Debit spreads: minimum PoP to be actionable |
+| `POP_HALF_SIZE_DEBIT_THRESHOLD` | `0.50` | Debit spreads: PoP below this → half size (unless score ≥ 70) |
+| `DEEP_FETCH_DTE_MIN` | `25` | Standard chain: minimum DTE to consider |
+| `DEEP_FETCH_DTE_MAX` | `45` | Standard chain: maximum DTE to consider |
+
+---
+
 ## Important Caveats
 
 - **Black-Scholes outputs are theoretical only.** Always verify live mid-price and IV Rank on your broker before placing any trade.
+- **0DTE B-S pricing**: For SPY 0DTE, `T_days` is floored at 1 (1/365 years) to prevent division by zero. Prices are theoretical and especially sensitive to intraday IV changes — verify live quotes before entry.
 - **IV Rank proxy**: For the first ~30 trading days after setup, IV Rank is computed from a rolling HV20 proxy. The briefing shows `⚠️ Proxy only` in the IV Data Quality row for each candidate until real IV accumulates.
 - **Pre-market pricing**: The pipeline runs at 7:30 AM ET, before the options market opens at 9:30 AM. Bid/ask quotes are zero pre-open; the pipeline uses raw strike prices and B-S theoretical pricing instead. Always verify the live mid-price on your broker before entering.
-- **Degenerate spreads**: If a strike selection produces a zero-width spread (e.g., long strike = short strike due to limited chain data), the candidate is silently dropped before reaching Claude rather than shown as invalid.
+- **Degenerate spreads**: If strike selection produces a zero-width spread (identical long and short strikes), the candidate is moved to the "Monitored but Not Actionable" appendix in the briefing rather than silently dropped.
 
 ---
 

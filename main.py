@@ -6,7 +6,7 @@ Scheduled:    launchd fires this Mon–Fri 7:30 AM ET via com.gg.options-briefin
 import json
 import resource
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 
 # Raise soft fd limit before any imports open SQLite/network connections.
@@ -19,7 +19,7 @@ import pandas_market_calendars as mcal
 from loguru import logger
 
 from errors import ErrorCode
-from config import PIPELINE_TIMEOUT_MINS
+from config import PIPELINE_TIMEOUT_MINS, TICKER_HISTORY_WINDOW_DAYS
 
 # Configure loguru: daily rotating log file + console
 logger.remove()
@@ -37,6 +37,64 @@ RAW_PATH       = OUTPUT_DIR / "raw_market_data.json"
 QUANT_PATH     = OUTPUT_DIR / "quant_signals.json"
 SCREENED_PATH  = OUTPUT_DIR / "screened_candidates.json"
 TOP_PATH       = OUTPUT_DIR / "top_candidates.json"
+HISTORY_PATH   = OUTPUT_DIR / "ticker_history.json"
+
+
+# ── Repeat ticker history helpers ─────────────────────────────────────────────
+
+def _load_ticker_history() -> dict:
+    if not HISTORY_PATH.exists():
+        return {}
+    try:
+        return json.loads(HISTORY_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _save_ticker_history(history: dict, today: str, tickers: list) -> None:
+    cutoff  = (date.today() - timedelta(days=TICKER_HISTORY_WINDOW_DAYS)).isoformat()
+    history = {d: t for d, t in history.items() if d >= cutoff}
+    history[today] = tickers
+    try:
+        HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        HISTORY_PATH.write_text(json.dumps(history, indent=2))
+    except Exception as e:
+        logger.warning(f"Failed to write ticker history: {e}")
+
+
+def _enrich_repeat_flags(candidates: list, history: dict) -> None:
+    """Attach repeat_days_ago (int or None) to each candidate in-place."""
+    for c in candidates:
+        ticker   = c.get("ticker", "")
+        days_ago = None
+        for i in range(1, TICKER_HISTORY_WINDOW_DAYS + 1):
+            d = (date.today() - timedelta(days=i)).isoformat()
+            if d in history and ticker in history[d]:
+                days_ago = i
+                break
+        c["repeat_days_ago"] = days_ago
+
+
+# ── Excluded ticker split helpers ─────────────────────────────────────────────
+
+def _is_excluded(c: dict) -> bool:
+    if c.get("pop_quality") == "EXCLUDE":
+        return True
+    pricing    = c.get("spread_pricing", {})
+    net_credit = float(pricing.get("net_credit") or 0)
+    net_debit  = float(pricing.get("net_debit")  or 0)
+    if net_credit == 0 and net_debit == 0:
+        return True
+    return False
+
+
+def _get_exclude_reason(c: dict) -> str:
+    if c.get("pop_quality") == "EXCLUDE":
+        bs      = c.get("bs", {})
+        pricing = c.get("spread_pricing", {})
+        pop     = float(bs.get("pop", pricing.get("pop", 0)) or 0)
+        return f"PoP {pop:.1%} below minimum floor"
+    return "Degenerate spread (zero-width or zero-value strikes)"
 
 
 def _save_json(data: dict, path: Path) -> None:
@@ -111,6 +169,25 @@ def run_daily_briefing() -> None:
     screened = compute_all_trade_management(screened)
     logger.info(f"[Phase 4] Complete in {(datetime.now()-phase_start).total_seconds():.1f}s")
 
+    # ── Repeat ticker flagging ───────────────────────────────────────────────
+    ticker_history = _load_ticker_history()
+    _enrich_repeat_flags(screened.get("candidates", []), ticker_history)
+    repeats = [c["ticker"] for c in screened.get("candidates", []) if c.get("repeat_days_ago")]
+    if repeats:
+        logger.info(f"[Repeat flags] {len(repeats)} repeat ticker(s): {repeats}")
+
+    # ── Excluded ticker split ────────────────────────────────────────────────
+    all_candidates = screened.get("candidates", [])
+    actionable     = [c for c in all_candidates if not _is_excluded(c)]
+    excluded       = [c for c in all_candidates if _is_excluded(c)]
+    for c in excluded:
+        c["exclude_reason"] = _get_exclude_reason(c)
+    screened["candidates"]          = actionable
+    screened["excluded_candidates"] = excluded
+    if excluded:
+        logger.info(f"[Excluded split] {len(excluded)} candidate(s) moved to appendix: "
+                    f"{[c['ticker'] for c in excluded]}")
+
     # ── Phase 5: Scenario Classification ────────────────────────────────────
     phase_start = datetime.now()
     logger.info("[Phase 5] Scenario classification starting...")
@@ -149,6 +226,12 @@ def run_daily_briefing() -> None:
         pipeline_start = pipeline_start,
     )
     logger.info(f"[Phase 7] Complete — briefing at {output_path}")
+
+    # ── Save ticker history (actionable only — excluded shouldn't seed next day's repeats) ──
+    _save_ticker_history(
+        ticker_history, today,
+        [c["ticker"] for c in screened.get("candidates", [])],
+    )
 
     total = (datetime.now() - pipeline_start).total_seconds()
     logger.info(f"{'='*60}")

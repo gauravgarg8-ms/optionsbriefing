@@ -50,6 +50,53 @@ def get_expiry_dates(ticker: str) -> list[str]:
     return []
 
 
+def fetch_0dte_chain(ticker: str) -> dict:
+    """
+    Fetch the 0DTE (same-day expiry) options chain for a ticker.
+    Selects today's expiry if available (SPY expires M/W/F); otherwise the
+    nearest expiry within 2 calendar days so the briefing is never empty.
+    Used only for PINNED_TICKERS with force_dte_0=True.
+    """
+    today = date.today()
+    try:
+        t     = yf.Ticker(ticker)
+        dates = t.options
+        if not dates:
+            logger.warning(f"[{ErrorCode.E1008}] No expiries found for {ticker} (0DTE fetch)")
+            return {"expiry": None, "options": [], "source": "yfinance"}
+
+        target = None
+        for d in sorted(dates):
+            exp = datetime.strptime(d, "%Y-%m-%d").date()
+            dte = (exp - today).days
+            if 0 <= dte <= 2:
+                target = d
+                break
+
+        if not target:
+            # No near-term expiry this week — fall back to earliest available
+            target = sorted(dates)[0]
+            logger.warning(
+                f"[{ErrorCode.E1008}] No 0–2 DTE expiry found for {ticker} — "
+                f"using earliest available: {target}"
+            )
+
+        chain   = t.option_chain(target)
+        options = []
+        for _, row in chain.puts.iterrows():
+            options.append(_yf_row_to_option(row, "put", target))
+        for _, row in chain.calls.iterrows():
+            options.append(_yf_row_to_option(row, "call", target))
+
+        actual_dte = (datetime.strptime(target, "%Y-%m-%d").date() - today).days
+        logger.info(f"0DTE chain for {ticker} ({target}, DTE={actual_dte}): {len(options)} contracts")
+        return {"expiry": target, "options": options, "source": "yfinance"}
+
+    except Exception as e:
+        logger.error(f"[{ErrorCode.E1008}] 0DTE chain fetch failed for {ticker}: {e}")
+        return {"expiry": None, "options": [], "source": "yfinance"}
+
+
 def fetch_options_chain(ticker: str) -> dict:
     """
     Fetch full options chain for target expiry.

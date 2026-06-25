@@ -15,6 +15,7 @@ from screening.sentiment_gate import apply_gate_to_pool
 from screening.scorer import filter_by_score, compute_confidence
 from screening.composition import compose_final_output
 from quant.quant_engine import run_deep_quant
+from config import PINNED_TICKERS
 from errors import ErrorCode
 
 OUTPUT_SCREENED = Path(__file__).parent.parent / "output" / "screened_candidates.json"
@@ -57,6 +58,14 @@ def run_screening(quant_data: dict, data_engine=None) -> dict:
     if not top_15:
         logger.error(f"[{ErrorCode.E3001}] No candidates passed score floor in 2B")
         return _empty_output()
+
+    # ── Force-inject pinned tickers (e.g. SPY) into deep-fetch pool ──────────
+    for entry in PINNED_TICKERS:
+        sym = entry["symbol"]
+        if sym in quant_signals and not any(c.get("ticker") == sym for c in top_15):
+            pinned_c = {**quant_signals[sym], "ticker": sym, "screen_pool": "pinned"}
+            top_15.insert(0, pinned_c)
+            logger.info(f"[Phase 3 — 2C] Pinned ticker {sym} force-injected into deep-fetch pool")
 
     # ── Step 2C: Deep fetch + full quant for top 15 ──────────────────────────
     logger.info(f"[Phase 3 — 2C] Deep fetch for {len(top_15)} candidates")

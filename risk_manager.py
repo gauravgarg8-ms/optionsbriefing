@@ -8,6 +8,7 @@ from loguru import logger
 from config import (
     POP_FLOOR, POP_HALF_SIZE_THRESHOLD,
     POP_FLOOR_DEBIT, POP_HALF_SIZE_DEBIT_THRESHOLD,
+    POP_HALF_SIZE_SCORE_OVERRIDE,
 )
 
 _DEBIT_STRUCTURES = {"bull_call_spread", "bear_put_spread", "long_straddle", "long_strangle"}
@@ -31,9 +32,15 @@ def compute_trade_management(candidate: dict) -> dict:
     avoid_hold_past = None
     if expiry_str:
         try:
-            expiry_date     = datetime.strptime(expiry_str, "%Y-%m-%d").date()
-            date_21_dte     = (expiry_date - timedelta(days=21)).isoformat()
-            avoid_hold_past = (expiry_date - timedelta(days=7)).isoformat()
+            expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+            is_0dte     = (expiry_date == date.today())
+            if is_0dte:
+                # 0DTE: 21-DTE concept doesn't apply — exit intraday
+                date_21_dte     = "0DTE — exit before market close today"
+                avoid_hold_past = expiry_date.isoformat()
+            else:
+                date_21_dte     = (expiry_date - timedelta(days=21)).isoformat()
+                avoid_hold_past = (expiry_date - timedelta(days=7)).isoformat()
         except ValueError as e:
             logger.warning(f"[{ErrorCode.E2002}] Bad expiry format for {candidate.get('ticker')}: {e}")
 
@@ -77,7 +84,8 @@ def compute_trade_management(candidate: dict) -> dict:
     else:
         pop_quality = "N/A"
 
-    pop_half_size = pop_floor <= pop < pop_half_threshold
+    score = float(candidate.get("score", 0) or 0)
+    pop_half_size = (pop_floor <= pop < pop_half_threshold) and (score < POP_HALF_SIZE_SCORE_OVERRIDE)
 
     return {
         **candidate,
