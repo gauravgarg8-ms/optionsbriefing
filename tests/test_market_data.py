@@ -63,7 +63,10 @@ class TestFetchVixSpy:
     def _make_price_series(self, n=210, start=100.0, step=0.1):
         dates = pd.bdate_range(end="2026-05-29", periods=n)
         prices = [start + i * step for i in range(n)]
-        return pd.DataFrame({"Close": prices}, index=dates)
+        df = pd.DataFrame({"Close": prices}, index=dates)
+        df["High"] = df["Close"] * 1.005
+        df["Low"]  = df["Close"] * 0.995
+        return df
 
     @patch("data.market_data.yf.download")
     def test_returns_expected_keys(self, mock_download):
@@ -72,7 +75,8 @@ class TestFetchVixSpy:
         mock_download.side_effect = [vix_df, spy_df]
 
         result = fetch_vix_spy()
-        for key in ["vix", "vix_regime", "spy_price", "spy_ma50", "spy_ma200", "spy_trend", "spy_hv20"]:
+        for key in ["vix", "vix_regime", "spy_price", "spy_ma50", "spy_ma200", "spy_trend", "spy_hv20",
+                    "spy_prior_close", "spy_5d_high", "spy_5d_low"]:
             assert key in result
 
     @patch("data.market_data.yf.download")

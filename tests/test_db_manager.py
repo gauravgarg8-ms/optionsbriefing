@@ -41,15 +41,15 @@ class TestGet52wkHighLow:
         assert low is None
 
     def test_sufficient_data_returns_correct_values(self, memory_db):
-        # Insert 365 rows with known max and min
-        base = date(2025, 5, 29)
+        # Insert 365 rows anchored to today so the 52-week window always covers them
+        base = date.today() - timedelta(days=364)
         for i in range(365):
             d = (base + timedelta(days=i)).isoformat()
             iv = 0.20 + (i % 100) * 0.003  # oscillates between 0.20 and 0.497
             memory_db.upsert_iv("SPY", d, round(iv, 4))
-        # Insert one row with known max and one with known min
-        memory_db.upsert_iv("SPY", "2025-06-01", 0.70)  # known max
-        memory_db.upsert_iv("SPY", "2025-06-02", 0.05)  # known min
+        # Overwrite two rows within the window with known extremes
+        memory_db.upsert_iv("SPY", (base + timedelta(days=10)).isoformat(), 0.70)  # known max
+        memory_db.upsert_iv("SPY", (base + timedelta(days=11)).isoformat(), 0.05)  # known min
         high, low = memory_db.get_52wk_high_low("SPY")
         assert high is not None
         assert low is not None

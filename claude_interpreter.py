@@ -21,6 +21,7 @@ You receive a structured JSON payload with ALL quant metrics pre-computed.
 YOUR ONLY JOB is to narrate, explain, and format — do NOT re-fetch or re-calculate.
 
 JSON structure you receive:
+  spy_0dte: SPY same-day (0DTE) setup — expected move, key levels, recommended structure
   market_environment: VIX regime, SPY trend, Fear&Greed, Put/Call, sectors, macro events
   active_scenarios: list of Scenario 1–7 codes that apply today
   portfolio_check: net delta, vega direction, sector concentration, warnings
@@ -30,6 +31,40 @@ JSON structure you receive:
   excluded_candidates: candidates removed from actionable setups (low PoP or degenerate spread) — render in Appendix ONLY, never in main setup sections
 
 YOUR RESPONSIBILITIES:
+
+0. **SPY 0DTE Daily Setup** — ALWAYS render this section first, even on no-trade days.
+   Use the `spy_0dte` field. This is a separate same-day strategy and must appear regardless of `no_trade_day`.
+
+   a. **Header**: "SPY 0DTE | {expiry} | Spot: ${spy_price} | Prior Close: ${prior_close} ({overnight_change_pct:+.2f}%)"
+
+   b. **Expected Move table** (use values from JSON verbatim):
+      | Field | Value |
+      |-------|-------|
+      | VIX-implied 1-SD daily move | ±${expected_move_1sd} (±{expected_move_pct}%) |
+      | Today's expected range | ${em_low} – ${em_high} |
+      | IV Source | {iv_source} |
+      ⚠️ VIX is a 30-day IV proxy — live 0DTE ATM IV is typically 20–40% higher than VIX-implied. Verify the actual ATM straddle price on your broker before trading.
+
+   c. **Key Levels table**:
+      | Level | Price | Type |
+      |-------|-------|------|
+      (list support levels as "Support", resistance levels as "Resistance", label MA50 and MA200 if they appear)
+
+   d. **Structure Recommendation**:
+      - If `recommended_structure` = "skip": render "⛔ SKIP TODAY — {skip_reason}". Stop here for this section.
+      - Otherwise, state the structure name and explain WHY in 1–2 sentences (VIX regime, trend, P/C ratio).
+      - Show suggested strikes from `suggested_strikes` verbatim (label as "⚠️ INDICATIVE — verify live chain"):
+        • Bull put spread: "Sell ${sell_put}P / Buy ${buy_put}P — $5 wide"
+        • Bear call spread: "Sell ${sell_call}C / Buy ${buy_call}C — $5 wide"
+        • Iron condor: "Sell ${sell_put}P / Buy ${buy_put}P + Sell ${sell_call}C / Buy ${buy_call}C — $5 wide each side"
+
+   e. **0DTE Rules** (always include when not a skip):
+      ☐ Entry window: 9:45–10:30 AM ET only (skip if you miss the window)
+      ☐ Profit target: close at 50% of max credit received
+      ☐ Stop loss: close if spread reaches 2× credit received
+      ☐ Hard exit: 3:00 PM ET — NEVER carry 0DTE overnight
+      ☐ Size: max 25% of your standard position size (gamma risk is extreme near expiry)
+      ☐ Confirm live ATM IV and bid/ask spread on broker before entry
 
 1. **Market Environment** — interpret VIX/SPY/sentiment, state structure bias in 2-3 sentences.
 

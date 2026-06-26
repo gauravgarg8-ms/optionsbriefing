@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,9 @@ from config import TRADIER_BASE, LIQUIDITY_MAX_BID_ASK_PCT, LIQUIDITY_MIN_OI
 from data.options_data import compute_bid_ask_pct, filter_liquid_strikes, fetch_options_chain
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# Dynamic expiry always 30 days out — stays within DEEP_FETCH_DTE_MIN/MAX (25–45)
+_EXPIRY_30D = (date.today() + timedelta(days=30)).strftime("%Y-%m-%d")
 
 
 class TestComputeBidAskPct:
@@ -75,9 +79,10 @@ class TestFilterLiquidStrikes:
 
 
 class TestFetchOptionsChain:
-    def _make_mock_yf_ticker(self, expiry="2026-07-06"):
+    def _make_mock_yf_ticker(self, expiry=None):
         from unittest.mock import MagicMock
         import pandas as pd
+        expiry = expiry or _EXPIRY_30D
         mock_t = MagicMock()
         mock_t.options = [expiry]
         mock_chain = MagicMock()
@@ -101,7 +106,7 @@ class TestFetchOptionsChain:
             result = fetch_options_chain("NVDA")
         assert result["source"] == "yfinance"
         assert len(result["options"]) == 2   # 1 put + 1 call
-        assert result["expiry"] == "2026-07-06"
+        assert result["expiry"] == _EXPIRY_30D
 
     @resp_lib.activate
     def test_tradier_used_when_token_set(self):
@@ -111,7 +116,7 @@ class TestFetchOptionsChain:
         options    = chain_data["options"]["option"]
 
         resp_lib.add(resp_lib.GET, f"{TRADIER_BASE}/markets/options/expirations",
-                     json={"expirations": {"date": ["2026-07-06"]}}, status=200)
+                     json={"expirations": {"date": [_EXPIRY_30D]}}, status=200)
         resp_lib.add(resp_lib.GET, f"{TRADIER_BASE}/markets/options/chains",
                      json={"options": {"option": options}}, status=200)
 
@@ -119,14 +124,14 @@ class TestFetchOptionsChain:
             result = fetch_options_chain("NVDA")
         assert result["source"] == "tradier"
         assert len(result["options"]) == 3
-        assert result["expiry"] == "2026-07-06"
+        assert result["expiry"] == _EXPIRY_30D
 
     @resp_lib.activate
     def test_tradier_failure_falls_back_to_yfinance(self):
         """If Tradier is configured but returns 500, falls back to yfinance."""
         from unittest.mock import patch
         resp_lib.add(resp_lib.GET, f"{TRADIER_BASE}/markets/options/expirations",
-                     json={"expirations": {"date": ["2026-07-06"]}}, status=200)
+                     json={"expirations": {"date": [_EXPIRY_30D]}}, status=200)
         resp_lib.add(resp_lib.GET, f"{TRADIER_BASE}/markets/options/chains",
                      json={}, status=500)
 

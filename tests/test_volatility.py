@@ -37,7 +37,8 @@ class TestComputeHV20:
 
 class TestComputeIVRank:
     def test_correct_calculation(self, memory_db):
-        base = date(2025, 5, 29)
+        # Anchor to today so all rows fall within the 52-week window
+        base = date.today() - timedelta(days=364)
         for i in range(365):
             d  = (base + timedelta(days=i)).isoformat()
             iv = 0.20 + (i / 364) * 0.40   # range 0.20 → 0.60

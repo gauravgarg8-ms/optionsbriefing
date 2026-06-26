@@ -209,6 +209,9 @@ def run_daily_briefing() -> None:
     logger.info(f"[Phase 5] Complete in {(datetime.now()-phase_start).total_seconds():.1f}s")
     if _check_timeout(): return
 
+    # Carry SPY 0DTE setup into the payload Claude receives
+    screened["spy_0dte"] = raw_data.get("spy_0dte", {})
+
     # ── Phase 6: Claude Interpretation ──────────────────────────────────────
     phase_start = datetime.now()
     logger.info("[Phase 6] Claude interpretation starting...")

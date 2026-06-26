@@ -103,7 +103,7 @@ POP_HALF_SIZE_SCORE_OVERRIDE = 70  # full size allowed if score >= this, even at
 
 # ── Claude / Output ───────────────────────────────────────────────────────────
 CLAUDE_MODEL        = "claude-sonnet-4-6"
-CLAUDE_MAX_TOKENS   = 25000
+CLAUDE_MAX_TOKENS   = 32000
 CLAUDE_MAX_RETRIES  = 3
 PIPELINE_TIMEOUT_MINS = 30
 

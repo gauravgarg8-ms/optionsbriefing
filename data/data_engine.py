@@ -15,7 +15,7 @@ from pathlib import Path
 from loguru import logger
 
 from data.universe_manager import build_universe, prefilter_universe
-from data.market_data import fetch_vix_spy, fetch_sector_rotation, fetch_premarket_prices, fetch_market_caps
+from data.market_data import fetch_vix_spy, fetch_sector_rotation, fetch_premarket_prices, fetch_market_caps, compute_spy_0dte_setup
 from data.macro_data import fetch_macro_calendar, fetch_rates
 from data.sentiment_data import (
     fetch_fear_greed, fetch_put_call_ratio, fetch_market_news,
@@ -75,6 +75,7 @@ def run_data_collection() -> dict:
     put_call     = fetch_put_call_ratio()
     market_news  = fetch_market_news()
     unusual      = fetch_unusual_activity()
+    spy_0dte     = compute_spy_0dte_setup(vix_spy, float(put_call or 1.0), macro_events)
 
     leading_sectors  = sector_rot.get("leading_sectors", [])
     lagging_sectors  = sector_rot.get("lagging_sectors", [])
@@ -108,6 +109,7 @@ def run_data_collection() -> dict:
         "macro_events":      macro_events,
         "earnings_calendar": earnings_calendar,
         "unusual_activity":  unusual,
+        "spy_0dte":          spy_0dte,
     }
 
     _save_json(result, OUTPUT_RAW)

@@ -12,10 +12,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE_PAYLOAD = json.loads((FIXTURES / "sample_top_candidates.json").read_text())
 
 
-def _make_mock_message(text="Daily briefing content here."):
-    msg = MagicMock()
-    msg.content = [MagicMock(text=text)]
-    return msg
+def _make_stream_ctx(text="Daily briefing content here.", stop_reason="end_turn"):
+    """Return a mock context manager simulating client.messages.stream()."""
+    mock_stream = MagicMock()
+    mock_stream.get_final_text.return_value = text
+    mock_stream.get_final_message.return_value.stop_reason = stop_reason
+    ctx = MagicMock()
+    ctx.__enter__.return_value = mock_stream
+    ctx.__exit__.return_value = False
+    return ctx
 
 
 class TestRunClaudeBriefing:
@@ -23,11 +28,11 @@ class TestRunClaudeBriefing:
     def test_calls_claude_with_system_prompt(self, mock_anthropic_cls):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_message()
+        mock_client.messages.stream.return_value = _make_stream_ctx()
 
-        result = run_claude_briefing(SAMPLE_PAYLOAD)
+        run_claude_briefing(SAMPLE_PAYLOAD)
 
-        call_kwargs = mock_client.messages.create.call_args[1]
+        call_kwargs = mock_client.messages.stream.call_args[1]
         assert call_kwargs["system"] == SYSTEM_PROMPT
         assert "Generate today's daily options briefing" in call_kwargs["messages"][0]["content"]
 
@@ -35,7 +40,7 @@ class TestRunClaudeBriefing:
     def test_returns_text_from_response(self, mock_anthropic_cls):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_message("Briefing result text")
+        mock_client.messages.stream.return_value = _make_stream_ctx("Briefing result text")
 
         result = run_claude_briefing(SAMPLE_PAYLOAD)
         assert result == "Briefing result text"
@@ -45,9 +50,9 @@ class TestRunClaudeBriefing:
     def test_retries_on_rate_limit(self, mock_anthropic_cls, mock_sleep):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.side_effect = [
+        mock_client.messages.stream.side_effect = [
             anthropic.RateLimitError.__new__(anthropic.RateLimitError),
-            _make_mock_message("Success after retry"),
+            _make_stream_ctx("Success after retry"),
         ]
 
         result = run_claude_briefing(SAMPLE_PAYLOAD)
@@ -59,7 +64,7 @@ class TestRunClaudeBriefing:
     def test_raises_after_max_retries(self, mock_anthropic_cls, mock_sleep):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.side_effect = anthropic.RateLimitError.__new__(
+        mock_client.messages.stream.side_effect = anthropic.RateLimitError.__new__(
             anthropic.RateLimitError
         )
 
@@ -70,22 +75,22 @@ class TestRunClaudeBriefing:
     def test_no_trade_day_payload_still_calls_claude(self, mock_anthropic_cls):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_message("NO-TRADE DAY report")
+        mock_client.messages.stream.return_value = _make_stream_ctx("NO-TRADE DAY report")
 
         payload = {**SAMPLE_PAYLOAD, "no_trade_day": True, "candidates": []}
         result  = run_claude_briefing(payload)
         assert result == "NO-TRADE DAY report"
-        mock_client.messages.create.assert_called_once()
+        mock_client.messages.stream.assert_called_once()
 
     @patch("claude_interpreter.anthropic.Anthropic")
     def test_json_payload_included_in_user_message(self, mock_anthropic_cls):
         mock_client  = MagicMock()
         mock_anthropic_cls.return_value = mock_client
-        mock_client.messages.create.return_value = _make_mock_message()
+        mock_client.messages.stream.return_value = _make_stream_ctx()
 
         run_claude_briefing(SAMPLE_PAYLOAD)
 
-        call_content = mock_client.messages.create.call_args[1]["messages"][0]["content"]
+        call_content = mock_client.messages.stream.call_args[1]["messages"][0]["content"]
         # Verify key fields from the payload appear in the user message
         assert "NVDA" in call_content or "candidates" in call_content
 

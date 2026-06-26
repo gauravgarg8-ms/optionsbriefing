@@ -8,6 +8,9 @@ A hybrid Python + Claude AI pipeline that delivers a professional pre-market opt
 
 ```
 7:30 AM  Phase 1  data_engine.py         → raw_market_data.json
+                                            + spy_0dte section: expected move, key S/R
+                                              levels, structure recommendation (computed
+                                              from VIX proxy; no extra API calls)
          Phase 2A quant_engine.py        → lightweight signals (all ~515 tickers + SPY)
          Phase 2B screening_engine.py    → score + filter top 15 candidates
          Phase 2C quant_engine.py        → deep fetch: options chain + B-S pricing
@@ -15,6 +18,7 @@ A hybrid Python + Claude AI pipeline that delivers a professional pre-market opt
          Phase 4  risk_manager.py        → trade management dates, PoP quality, sizing
                                             0DTE candidates get same-day exit labels
          Phase 5  scenario_classifier.py → active scenario flags (FOMC, earnings, VIX)
+                                            spy_0dte payload attached before Phase 6
          Phase 6  claude_interpreter.py  → Claude writes narrative only
 ~7:37 AM Phase 7  delivery.py            → YYYY-MM-DD_OptionsBrief.txt
                                             ticker_history.json updated
@@ -48,13 +52,26 @@ Total runtime: ~7 minutes (dominated by Phase 2C — 15 deep option chain fetche
 
 ---
 
+## SPY 0DTE Daily Setup
+
+Every briefing opens with a dedicated **Section 0: SPY 0DTE Daily Setup**, computed independently in Phase 1 (not subject to the candidate screening pipeline). It always appears, even on no-trade days.
+
+| Field | Detail |
+|---|---|
+| Expected move | VIX-implied 1-SD daily move: `price × (VIX/100) / √252`. Labeled as proxy — verify live ATM IV on broker. |
+| Key levels | Prior close, MA50, 5-day high/low, nearest $5 round numbers, expected move edges |
+| Structure | `iron_condor` / `bull_put_spread` / `bear_call_spread` / `skip` — chosen by regime + trend + P/C ratio |
+| Skip conditions | High-impact macro event today (FOMC, CPI, GDP), or VIX ≥ 25 (elevated/crisis regime) |
+| Suggested strikes | Indicative $5-wide spread levels placed just outside the 1-SD expected move |
+| 0DTE rules | Entry 9:45–10:30 AM ET · 50% profit target · 2× stop · 3 PM hard exit · 25% max size |
+
 ## Pinned Tickers
 
-Certain tickers are included in every briefing regardless of screening results. Currently:
+Certain tickers are also included in the candidate pipeline regardless of screening results:
 
 | Ticker | Type | DTE | Rationale |
 |---|---|---|---|
-| `SPY` | Index ETF | 0DTE | Daily market-directional anchor; uses same-day expiry (Mon/Wed/Fri). Falls back to nearest ≤2-day expiry if today is not an SPY expiry day. |
+| `SPY` | Index ETF | 0DTE | Deep-fetched with today's expiry chain for B-S pricing. The 0DTE narrative section above is computed separately in Phase 1. Falls back to nearest ≤2-day expiry if today is not an SPY expiry day. |
 
 Pinned tickers bypass Screens 1–4 and the score floor. They go directly into Phase 2C deep fetch and are subject to the same B-S pricing, PoP gates, and trade management as regular candidates.
 
@@ -84,7 +101,7 @@ Each run produces up to 10 actionable setups plus a monitored-but-not-actionable
 | Market caps | yfinance `Ticker.fast_info.market_cap` | ThreadPoolExecutor(8) |
 | Options chain (standard) | yfinance (primary), Tradier (if token set) | DTE 25–45 day range |
 | Options chain (0DTE / SPY) | yfinance — today's expiry | Selects same-day expiry; falls back to nearest ≤2-day expiry |
-| VIX, SPY, sector ETFs | yfinance batch download | |
+| VIX, SPY, sector ETFs | yfinance batch download | `fetch_vix_spy()` also returns prior close, 5-day high/low for 0DTE level computation |
 | T-bill rate (risk-free) | FRED `DTB3` series | |
 | Fear & Greed index | CNN endpoint → VIX proxy fallback | CNN blocks intermittently |
 | Put/Call ratio | CBOE date-specific CSV → SPY OI → VIX-based proxy | 3-tier fallback |
@@ -204,8 +221,8 @@ output/briefings/YYYY-MM-DD_OptionsBrief.txt
 ```
 
 Each file contains:
+- **Section 0: SPY 0DTE Daily Setup** — always first; VIX-implied expected move range, key S/R levels, recommended structure (or skip reason), suggested strikes, 0DTE rules
 - Market environment (VIX regime, SPY trend, sector rotation, macro event calendar)
-- SPY 0DTE setup (pinned daily, same-day expiry, same-day exit management)
 - Up to 10 options trade setups with full B-S theoretical pricing tables
 - Repeat ticker flags — "(seen N day(s) ago — consider de-prioritizing)" when a ticker appeared in a recent briefing
 - IV Data Quality row per candidate (real IV days / 30 threshold)
@@ -261,7 +278,7 @@ pytest tests/test_screens.py tests/test_scorer.py tests/test_quant_engine.py tes
 pytest tests/test_risk_manager.py tests/test_scenario_classifier.py tests/test_claude_interpreter.py tests/test_delivery.py -v
 ```
 
-> 8 pre-existing test failures in `test_claude_interpreter`, `test_db_manager`, and `test_options_data` (Tradier mock / SQLite edge cases). All pipeline logic tests pass.
+> 316/316 tests passing.
 
 ---
 
@@ -280,6 +297,7 @@ pytest tests/test_risk_manager.py tests/test_scenario_classifier.py tests/test_c
 | `POP_HALF_SIZE_DEBIT_THRESHOLD` | `0.50` | Debit spreads: PoP below this → half size (unless score ≥ 70) |
 | `DEEP_FETCH_DTE_MIN` | `25` | Standard chain: minimum DTE to consider |
 | `DEEP_FETCH_DTE_MAX` | `45` | Standard chain: maximum DTE to consider |
+| `CLAUDE_MAX_TOKENS` | `32000` | Output token budget for Claude (increased from 25k to accommodate SPY 0DTE section) |
 
 ---
 
